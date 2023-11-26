@@ -50,20 +50,76 @@
     return typeof key === "symbol" ? key : String(key);
   }
 
+  // 重写部分数组方法
+
+  // 1.获取数组原型
+  var oldArrayProto = Array.prototype;
+
+  // 2.创建新的数组原型
+  var newArrayPtoto = Object.create(oldArrayProto);
+
+  // 所有的变异方法
+  // concat slice不会改变原数组
+  var methods = ['push', 'pop', 'shift', 'unshift', 'reverse', 'sort', 'splice'];
+  // 重写方法
+  methods.forEach(function (method) {
+    newArrayPtoto[method] = function () {
+      var _oldArrayProto$method;
+      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+      // 1.内部调用原来的方法,函数劫持
+      var res = (_oldArrayProto$method = oldArrayProto[method]).call.apply(_oldArrayProto$method, [this].concat(args));
+      console.log('调用', method);
+
+      // 2.对方法传的参数再次劫持
+      var inserted;
+      var ob = this.__ob__;
+      switch (method) {
+        case 'push':
+        case 'unshift':
+          inserted = args;
+          break;
+        case 'splice':
+          // splice方法第三个参数为新增的数据
+          inserted = args.slice(2);
+      }
+
+      // 2.1如果有新增的内容,再次观测
+      if (inserted) {
+        ob.observeArray(inserted);
+      }
+      return res;
+    };
+  });
+
   function observe(data) {
     // 对object劫持
     if (_typeof(data) !== 'object' || data == null) {
       return; //只对对象劫持
     }
-    // 判断对象是否背劫持过,被劫持过的数据不需要再劫持,增添一个实例判断
+    // 判断对象是否被劫持过,被劫持过的数据不需要再劫持,增添一个实例判断
     return new Observer(data);
   }
   var Observer = /*#__PURE__*/function () {
     function Observer(data) {
       _classCallCheck(this, Observer);
+      // 不可枚举
+      Object.defineProperty(data, '__ob__', {
+        value: this,
+        enumerable: false
+      });
+      // data.__ob__ = this;
       // Object.defineProperty只能劫持已存在的属性,vue2里会单独写一些api,$set $delete
       // 遍历对象
-      this.walk(data);
+      if (Array.isArray(data)) {
+        // 重写数组的7个变异方法,保留数组原特性
+        data.__proto__ = newArrayPtoto;
+        // 如果数组元素是对象, 数组中的属性也劫持
+        this.observeArray(data);
+      } else {
+        this.walk(data);
+      }
     }
     _createClass(Observer, [{
       key: "walk",
@@ -72,6 +128,14 @@
         // 重新定义属性
         Object.keys(data).forEach(function (key) {
           return defineReactive(data, key, data[key]);
+        });
+      }
+    }, {
+      key: "observeArray",
+      value: function observeArray(data) {
+        // 数组的每一项属性都进行观测
+        data.forEach(function (item) {
+          return observe(item);
         });
       }
     }]);
@@ -83,7 +147,7 @@
     Object.defineProperty(target, key, {
       // 取值时执行
       get: function get() {
-        console.log('get');
+        console.log('get', value);
         return value;
       },
       // 赋值时执行

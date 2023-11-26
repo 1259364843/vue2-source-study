@@ -16,13 +16,16 @@
           name: "zs",
           obj: {
             age: 20
-          }
+          },
+          arr: ['aa', 'bb', 'cc', {
+            name: 'ls'
+          }]
         }
       }
     })
-
-    vm.name = '李四'
     console.log(vm);
+    vm.arr[3].name
+    vm.arr.push(1)
   </script>
 </body>
 
